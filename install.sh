@@ -68,6 +68,7 @@ chmod 700 "$INSTALL_DIR"
 
 /usr/bin/rsync -a \
   --delete \
+  --checksum \
   --exclude '.git/' \
   --exclude '.github/' \
   --exclude 'node_modules/' \

@@ -153,7 +153,7 @@ The installer:
 
 1. Resolves the current user's home directory at runtime.
 2. Creates `$HOME/.MoA` when necessary.
-3. Copies the application without Git metadata, caches, build output, secrets, or local configuration.
+3. Replaces changed application files by content and removes stale application files, while preserving private configuration and runtime data.
 4. Installs dependencies and builds the Vite application.
 5. Builds the native `MoA.app` wrapper.
 6. Registers and starts a private per-user LaunchAgent with automatic recovery.
@@ -202,7 +202,7 @@ git pull --ff-only
 ./install.sh
 ```
 
-Reinstallation preserves private CLI configuration, optional-explorer settings, chat sessions, staged runtime storage, and saved runs while replacing application source and rebuilding the app.
+Reinstallation preserves private CLI configuration, optional-explorer settings, chat sessions, staged runtime storage, and saved runs while replacing application source, rebuilding the app, and restarting the local service so the new server code is active immediately.
 
 ### Troubleshooting installation
 

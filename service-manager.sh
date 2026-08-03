@@ -9,7 +9,7 @@ DOMAIN="gui/$(id -u)"
 PLIST_SOURCE="$APP_DIR/macos/$SERVICE_LABEL.plist"
 PLIST_DIR="$HOME_DIR/Library/LaunchAgents"
 PLIST_TARGET="$PLIST_DIR/$SERVICE_LABEL.plist"
-STATUS_URL="http://127.0.0.1:4317/api/health"
+STATUS_URL="${MOA_STATUS_URL:-http://127.0.0.1:4317/api/health}"
 
 service_healthy() {
   /usr/bin/curl --silent --fail --max-time 2 "$STATUS_URL" >/dev/null 2>&1
@@ -38,28 +38,40 @@ install_service() {
   launchctl enable "$DOMAIN/$SERVICE_LABEL" >/dev/null 2>&1 || true
 }
 
-start_service() {
-  install_service
-  if service_healthy; then
-    exit 0
-  fi
-
-  launchctl kickstart -k "$DOMAIN/$SERVICE_LABEL" >/dev/null 2>&1 || true
-
+wait_for_service() {
   for _ in {1..60}; do
     if service_healthy; then
-      exit 0
+      return 0
     fi
     sleep 0.25
   done
 
   printf 'MoA service failed to become ready. Review %s\n' "$APP_DIR/moa-webui.log" >&2
-  exit 1
+  return 1
+}
+
+start_service() {
+  install_service
+  if service_healthy; then
+    return 0
+  fi
+
+  launchctl kickstart -k "$DOMAIN/$SERVICE_LABEL" >/dev/null 2>&1 || true
+  wait_for_service
+}
+
+restart_service() {
+  install_service
+  # Reinstallation replaces the application beneath an already-running
+  # LaunchAgent. A healthy response can still come from the old Node process,
+  # so an install must always restart it before reporting success.
+  launchctl kickstart -k "$DOMAIN/$SERVICE_LABEL" >/dev/null 2>&1 || true
+  wait_for_service
 }
 
 case "${1:-start}" in
   start) start_service ;;
-  install) start_service ;;
+  install) restart_service ;;
   status) service_healthy ;;
   *) printf 'Usage: %s [start|install|status]\n' "$0" >&2; exit 2 ;;
 esac
