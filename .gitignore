@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+MoA.app/
+.env
+.env.*
+!.env.example
+MoA_WebCodeContextBundle.txt
+.MoA_WebCodeContextBundle.txt
+.MoA_CodeContextBundle.txt
+cli-integrations.json
+optional-explorers.json
+upload-staging/
+chat-sessions/
+tmp/
+MoA Runs/

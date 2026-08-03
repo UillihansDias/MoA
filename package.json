@@ -1,0 +1,44 @@
+{
+  "name": "moa-webui",
+  "version": "1.0.0",
+  "description": "Local-first macOS desktop app for independent multi-agent exploration, evidence consolidation, judged execution, approval-gated correction, and verification.",
+  "private": true,
+  "type": "module",
+  "homepage": "https://github.com/UillihansDias/MoA",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/UillihansDias/MoA.git"
+  },
+  "keywords": [
+    "macos",
+    "agents",
+    "codex",
+    "orchestration",
+    "local-first",
+    "multi-agent"
+  ],
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "scripts": {
+    "dev": "node server.mjs --dev",
+    "build": "vite build",
+    "postinstall": "node scripts/ensure-node-pty.mjs",
+    "start": "node server.mjs",
+    "check": "vite build",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "6.0.3",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
+    "node-pty": "1.1.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "vite": "8.1.5",
+    "ws": "8.21.1"
+  },
+  "allowScripts": {
+    "node-pty@1.1.0": true
+  }
+}
