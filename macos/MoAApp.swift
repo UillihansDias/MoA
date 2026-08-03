@@ -16,17 +16,6 @@ private func color(from hex: String) -> NSColor? {
     )
 }
 
-private struct WindowBackgroundModifier: ViewModifier {
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(macOS 15.0, *) {
-            content.containerBackground(.clear, for: .window)
-        } else {
-            content
-        }
-    }
-}
-
 @main
 struct MoAApp: App {
     @State private var isLightTheme = false
@@ -40,7 +29,6 @@ struct MoAApp: App {
 
                 MoAWebView(url: moaURL, isLightTheme: $isLightTheme, windowBackgroundColor: $windowBackgroundColor)
             }
-            .modifier(WindowBackgroundModifier())
             .preferredColorScheme(isLightTheme ? .light : .dark)
             .frame(minWidth: 980, minHeight: 640)
         }
