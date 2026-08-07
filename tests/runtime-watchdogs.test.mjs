@@ -312,7 +312,7 @@ if (process.argv[1].endsWith('opencode')) {
   setInterval(() => {}, 1000);
 }
 `;
-    await Promise.all(['codex', 'agy', 'opencode'].map(async (name) => {
+    await Promise.all(['codex', 'agy', 'opencode', 'claude'].map(async (name) => {
       const executable = path.join(bin, name);
       await writeFile(executable, probeCli);
       await chmod(executable, 0o755);
@@ -324,7 +324,7 @@ if (process.argv[1].endsWith('opencode')) {
     });
     await waitFor(async () => (await fetch(`http://127.0.0.1:${port}/api/health`)).ok);
     const status = await (await fetch(`http://127.0.0.1:${port}/api/status`)).json();
-    assert.deepEqual(status.cliIntegrations.map(({ available }) => available), [true, true, true]);
+    assert.deepEqual(status.cliIntegrations.map(({ available }) => available), [true, true, true, true]);
   } finally {
     await stopServer(server);
     await rm(temporary, { recursive: true, force: true });

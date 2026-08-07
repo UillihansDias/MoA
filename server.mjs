@@ -23,6 +23,7 @@ const CHAT_SESSIONS_DIR = process.env.MOA_CHAT_SESSIONS_DIR || path.join(HOME_DI
 const COMMAND = path.join(ROOT, 'MoA.command');
 const WORKFLOW_SCRIPT_PATH = process.env.MOA_WORKFLOW_SCRIPT || COMMAND;
 const CLI_CONFIG_FILE = path.join(HOME_DIR, '.MoA', 'cli-integrations.json');
+const CLI_ENABLED_CONFIG_FILE = path.join(HOME_DIR, '.MoA', 'cli-enabled.json');
 const OPTIONAL_EXPLORER_CONFIG_FILE = path.join(HOME_DIR, '.MoA', 'optional-explorers.json');
 const APP_PATH = [LOCAL_BIN, path.join(HOME_DIR, '.antigravity-ide', 'antigravity-ide', 'bin'), '/opt/homebrew/bin', '/usr/local/bin', process.env.PATH || ''].filter(Boolean).join(path.delimiter);
 const positiveDuration = (value, fallback) => {
@@ -54,6 +55,7 @@ const BUILT_IN_CLIS = [
   { id: 'codex', label: 'Codex', mark: 'C', command: 'codex', preferred: path.join(LOCAL_BIN, 'codex'), launcher: path.join(DESKTOP_DIR, 'Codex CLI.command'), builtIn: true },
   { id: 'antigravity', label: 'Antigravity', mark: 'A', command: 'agy', preferred: path.join(LOCAL_BIN, 'agy'), launcher: path.join(DESKTOP_DIR, 'Start Antigravity CLI.command'), builtIn: true },
   { id: 'opencode', label: 'OpenCode', mark: 'OC', command: 'opencode', preferred: path.join(LOCAL_BIN, 'opencode'), launcher: path.join(DESKTOP_DIR, 'Opencode.command'), builtIn: true },
+  { id: 'claude', label: 'Claude Code', mark: 'CC', command: 'claude', preferred: path.join(LOCAL_BIN, 'claude'), launcher: path.join(DESKTOP_DIR, 'Claude Code.command'), builtIn: true },
 ];
 const OPTIONAL_EXPLORERS = [
   { id: 'openclaw', label: 'OpenClaw', mark: 'OC', command: 'openclaw', preferred: path.join(LOCAL_BIN, 'openclaw') },
@@ -256,8 +258,8 @@ const workflowScriptForApp = async () => {
   return script.replace(original, appInvocation);
 };
 
-const registerWorkflowProcess = ({ id, child, workspace, task, runPath = '', stage = 'initialize', optionalExplorers = [] }) => {
-  const expertNames = ['codex', 'antigravity', 'opencode', ...optionalExplorers];
+const registerWorkflowProcess = ({ id, child, workspace, task, runPath = '', stage = 'initialize', explorers = [] }) => {
+  const expertNames = explorers;
   const runState = {
     child,
     workspace,
@@ -442,6 +444,22 @@ const writeCustomClis = async (clis) => {
   cliIntegrationCache = { key: '', expiresAt: 0, value: null, pending: null };
 };
 
+const readCliEnabledSettings = async () => {
+  try {
+    const parsed = JSON.parse(await fs.readFile(CLI_ENABLED_CONFIG_FILE, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed.enabled || {} : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeCliEnabledSettings = async (enabled) => {
+  await fs.mkdir(path.dirname(CLI_ENABLED_CONFIG_FILE), { recursive: true, mode: 0o700 });
+  await atomicWriteFile(CLI_ENABLED_CONFIG_FILE, `${JSON.stringify({ schemaVersion: 1, enabled }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  await fs.chmod(CLI_ENABLED_CONFIG_FILE, 0o600);
+  cliIntegrationCache = { key: '', expiresAt: 0, value: null, pending: null };
+};
+
 const defaultOptionalExplorerSettings = () => Object.fromEntries(OPTIONAL_EXPLORERS.map(({ id }) => [id, false]));
 
 const readOptionalExplorerSettings = async () => {
@@ -481,19 +499,21 @@ const workflowEnvironment = async () => ({
   MOA_ROOT: ROOT,
   MOA_RUNS_DIR: RUNS_DIR,
   MOA_UPLOADS_DIR: UPLOADS_DIR,
+  MOA_ENABLED_CLIS: (await getCliDefinitions()).filter(({ builtIn, enabled }) => builtIn && enabled).map(({ id }) => id).join(','),
   MOA_OPTIONAL_EXPLORERS: (await enabledOptionalExplorerIds()).join(','),
 });
 
 const cliMark = (label) => label.split(/\s+/).slice(0, 2).map((word) => word[0]).join('').toUpperCase().slice(0, 3);
 
 const getCliDefinitions = async () => {
-  const custom = (await readCustomClis()).map((cli) => ({ ...cli, mark: cliMark(cli.label), preferred: cli.command, builtIn: false }));
-  return [...BUILT_IN_CLIS, ...custom];
+  const [customClis, enabledSettings] = await Promise.all([readCustomClis(), readCliEnabledSettings()]);
+  const custom = customClis.map((cli) => ({ ...cli, mark: cliMark(cli.label), preferred: cli.command, builtIn: false }));
+  return [...BUILT_IN_CLIS, ...custom].map((cli) => ({ ...cli, enabled: enabledSettings[cli.id] !== false }));
 };
 
 const getCliIntegrations = async () => {
   const definitions = await getCliDefinitions();
-  const key = JSON.stringify(definitions.map(({ id, command, preferred, launcher }) => [id, command, preferred, launcher]));
+  const key = JSON.stringify(definitions.map(({ id, command, preferred, launcher, enabled }) => [id, command, preferred, launcher, enabled]));
   const now = Date.now();
   if (cliIntegrationCache.key === key && cliIntegrationCache.value && cliIntegrationCache.expiresAt > now) return cliIntegrationCache.value;
   if (cliIntegrationCache.key === key && cliIntegrationCache.pending) return cliIntegrationCache.pending;
@@ -505,7 +525,7 @@ const getCliIntegrations = async () => {
     for (const cli of definitions) {
       const info = await binaryInfo(cli.command, cli.preferred);
       const model = cli.id === 'opencode' && info.available ? await opencodeModelInfo(cli.preferred) : null;
-      integrations.push({ id: cli.id, label: cli.label, mark: cli.mark, command: cli.command, launcher: cli.launcher || '', builtIn: cli.builtIn, available: model ? model.available : info.available, gatewayAvailable: info.available, gatewayVersion: info.version, version: model?.available ? `${info.version} · ${model.detail}` : model?.detail || info.version, launcherAvailable: Boolean(cli.launcher && existsSync(cli.launcher)) });
+      integrations.push({ id: cli.id, label: cli.label, mark: cli.mark, command: cli.command, launcher: cli.launcher || '', builtIn: cli.builtIn, enabled: cli.enabled, available: model ? model.available : info.available, gatewayAvailable: info.available, gatewayVersion: info.version, version: model?.available ? `${info.version} · ${model.detail}` : model?.detail || info.version, launcherAvailable: Boolean(cli.launcher && existsSync(cli.launcher)) });
     }
     return integrations;
   })();
@@ -764,7 +784,7 @@ const getRun = async (name) => {
   if (!safeRunName(name)) return null;
   const dir = path.join(RUNS_DIR, name);
   if (!existsSync(dir)) return null;
-  const files = ['task.txt', 'workspace.txt', 'attachments.json', 'original-objective.txt', 'resume-instruction.txt', 'continuation-context.md', 'inherited-context.json', 'run.json', 'events.jsonl', 'git-intake.json', 'git-pre-execution.json', 'git-after-execution.json', 'workspace-change-ledger.json', 'investigation-brief.md', 'codex.md', 'antigravity.md', 'opencode.md', 'openclaw.md', 'hermes.md', 'successful-expert-reports.txt', 'evidence.md', 'judge.md', 'judge-blocked-attempt-1.md', 'judge-revision-attempt-1.md', 'execution-blocked-attempt-1.md', 'execution-attempt-1.md', 'verification-attempt-1.md', 'judge-correction-blocked-attempt-1.md', 'correction-blocked-attempt-1.md', 'judge-correction-revision-attempt-1.md', 'execution.md', 'verification.md', 'plan.log', 'codex.log', 'antigravity.log', 'opencode.log', 'openclaw.log', 'hermes.log', 'consolidation.log', 'judge.log', 'judge-revision.log', 'execution.log', 'verification.log', 'workflow.status.json', 'execution.status.json'];
+  const files = ['task.txt', 'workspace.txt', 'attachments.json', 'original-objective.txt', 'resume-instruction.txt', 'continuation-context.md', 'inherited-context.json', 'run.json', 'events.jsonl', 'git-intake.json', 'git-pre-execution.json', 'git-after-execution.json', 'workspace-change-ledger.json', 'investigation-brief.md', 'codex.md', 'antigravity.md', 'opencode.md', 'claude.md', 'openclaw.md', 'hermes.md', 'successful-expert-reports.txt', 'evidence.md', 'judge.md', 'judge-blocked-attempt-1.md', 'judge-revision-attempt-1.md', 'execution-blocked-attempt-1.md', 'execution-attempt-1.md', 'verification-attempt-1.md', 'judge-correction-blocked-attempt-1.md', 'correction-blocked-attempt-1.md', 'judge-correction-revision-attempt-1.md', 'execution.md', 'verification.md', 'plan.log', 'codex.log', 'antigravity.log', 'opencode.log', 'claude.log', 'openclaw.log', 'hermes.log', 'consolidation.log', 'judge.log', 'judge-revision.log', 'execution.log', 'verification.log', 'workflow.status.json', 'execution.status.json'];
   const result = { name, files: {}, summary: await runSummary(name) };
   await Promise.all(files.map(async (file) => {
     result.files[file] = await fs.readFile(path.join(dir, file), 'utf8').catch(() => '');
@@ -934,10 +954,13 @@ const startRun = async (req, res) => {
   let child;
   let attachmentBatch = null;
   let optionalExplorers = [];
+  let explorers = [];
   try {
     attachmentBatch = await prepareAttachmentBatch(attachmentIds);
     const environment = await workflowEnvironment();
+    const enabledClis = environment.MOA_ENABLED_CLIS.split(',').filter(Boolean);
     optionalExplorers = environment.MOA_OPTIONAL_EXPLORERS.split(',').filter(Boolean);
+    explorers = [...enabledClis, ...optionalExplorers];
     child = spawn('/bin/bash', ['-s', '--', '--moa-run', workspace, task.trim(), attachmentBatch || ''], {
       cwd: workspace,
       env: environment,
@@ -950,7 +973,7 @@ const startRun = async (req, res) => {
     throw error;
   }
   child.stdin.end(workflowScript);
-  registerWorkflowProcess({ id, child, workspace, task: task.trim(), optionalExplorers });
+  registerWorkflowProcess({ id, child, workspace, task: task.trim(), explorers });
   if (Array.isArray(attachmentIds)) await Promise.all([...new Set(attachmentIds)].map((attachmentId) => fs.rm(path.join(UPLOADS_DIR, attachmentId), { recursive: true, force: true }).catch(() => {})));
   releaseAdmission();
   sendJson(res, 202, { id, startedAt: Date.now() });
@@ -1506,7 +1529,7 @@ const resolveTerminalCli = async (id) => {
   const [definitions, integrations] = await Promise.all([getCliDefinitions(), getCliIntegrations()]);
   const cli = definitions.find((item) => item.id === id);
   const integration = integrations.find((item) => item.id === id);
-  if (!cli || !integration?.gatewayAvailable) return null;
+  if (!cli || !integration?.enabled || !integration.gatewayAvailable) return null;
   return {
     ...cli,
     binary: existsSync(cli.preferred) ? cli.preferred : cli.command,
@@ -1522,9 +1545,9 @@ const terminalSessions = createTerminalSessionManager({
   disconnectGraceMs: positiveDuration(process.env.MOA_TERMINAL_DISCONNECT_GRACE_MS, 5_000),
 });
 
-const CHAT_AGENT_IDS = new Set(['codex', 'antigravity', 'opencode']);
+const CHAT_AGENT_IDS = new Set(['codex', 'antigravity', 'opencode', 'claude']);
 const listChatAgents = async () => (await getCliIntegrations())
-  .filter(({ id, available }) => CHAT_AGENT_IDS.has(id) && available)
+  .filter(({ id, available, enabled }) => CHAT_AGENT_IDS.has(id) && available && enabled)
   .map(({ id, label, mark }) => ({ id, label, mark }));
 
 const chatPrompt = (messages, attachments = []) => `You are responding inside MoA's local Chat session.
@@ -1550,6 +1573,8 @@ const executeChatAgent = async ({ agentId, messages, attachments, signal, onDelt
     args = ['exec', '--ephemeral', '--skip-git-repo-check', '--color', 'never', '-s', 'read-only', '-C', ROOT, prompt];
   } else if (agentId === 'antigravity') {
     args = ['--sandbox', '--print', prompt, '--print-timeout', '10m'];
+  } else if (agentId === 'claude') {
+    args = ['-p', '--permission-mode', 'plan', '--output-format', 'text', '--max-turns', '12', prompt];
   } else {
     args = ['run', '--dir', ROOT, '--model', OPENCODE_MODEL, '--title', 'MoA chat', prompt];
   }
@@ -1632,7 +1657,7 @@ const server = http.createServer(async (req, res) => {
       const [cliIntegrations, executions, optionalExplorers] = await Promise.all([getCliIntegrations(), getExecutionStatuses(), getOptionalExplorerStatus()]);
       const experts = BUILT_IN_CLIS.map((cli) => {
         const integration = cliIntegrations.find((item) => item.id === cli.id);
-        return { name: cli.command, available: Boolean(integration?.available), version: integration?.version || 'not found' };
+        return { name: cli.command, available: Boolean(integration?.available), enabled: integration?.enabled !== false, version: integration?.version || 'not found' };
       });
       const activeRuns = [...active.entries()].map(([id, run]) => ({ id, kind: run.kind, stage: run.stage || run.kind, status: run.recoveryStatus || (run.correctionAttempts && run.stage === 'execute' ? 'correcting' : 'running'), correctionAttempts: run.correctionAttempts || 0, planRevisionAttempts: run.planRevisionAttempts || 0, correctionPlanRevisionAttempts: run.correctionPlanRevisionAttempts || 0, runName: run.runName || null, workspace: run.workspace, task: run.task, startedAt: run.startedAt, lastActivityAt: run.lastActivityAt || run.startedAt }));
       experts.push(...optionalExplorers.map((explorer) => ({ name: explorer.id, available: explorer.available, version: explorer.version, optional: true, enabled: explorer.enabled })));
@@ -1734,6 +1759,20 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { optionalExplorers: await getOptionalExplorerStatus() });
     }
     if (url.pathname === '/api/cli-integrations' && req.method === 'GET') {
+      return sendJson(res, 200, { integrations: await getCliIntegrations() });
+    }
+    const cliEnabledMatch = url.pathname.match(/^\/api\/cli-integrations\/([0-9A-Za-z_-]+)$/);
+    if (cliEnabledMatch && req.method === 'PUT') {
+      if (active.size > 0 || admissionPending) return sendJson(res, 409, { error: 'Wait for the active workflow to finish before changing the CLI roster.' });
+      const body = await readBody(req);
+      if (typeof body.enabled !== 'boolean') return sendJson(res, 400, { error: 'CLI enabled state must be a boolean.' });
+      const id = cliEnabledMatch[1];
+      const integration = (await getCliIntegrations()).find((item) => item.id === id);
+      if (!integration) return sendJson(res, 404, { error: 'CLI integration not found.' });
+      if (body.enabled && !integration.gatewayAvailable) return sendJson(res, 409, { error: `${integration.label} is not installed or could not be started.` });
+      const enabled = await readCliEnabledSettings();
+      enabled[id] = body.enabled;
+      await writeCliEnabledSettings(enabled);
       return sendJson(res, 200, { integrations: await getCliIntegrations() });
     }
     if (url.pathname === '/api/attachments' && req.method === 'POST') return await uploadAttachment(req, res);

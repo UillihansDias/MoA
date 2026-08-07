@@ -82,6 +82,7 @@ const EXPLORERS = [
   { key: 'codex', systemName: 'codex', label: 'Codex', mark: 'C' },
   { key: 'antigravity', systemName: 'agy', label: 'Antigravity', mark: 'A' },
   { key: 'opencode', systemName: 'opencode', label: 'OpenCode', mark: 'OC' },
+  { key: 'claude', systemName: 'claude', label: 'Claude Code', mark: 'CC' },
   { key: 'openclaw', systemName: 'openclaw', label: 'OpenClaw', mark: 'OC', optional: true },
   { key: 'hermes', systemName: 'hermes', label: 'Hermes Agent', mark: 'H', optional: true },
 ];
@@ -433,7 +434,7 @@ function App() {
   const running = workflowLocked && !correctionApproval;
   const activeExplorers = useMemo(() => EXPLORERS.filter((explorer) => {
     const status = system.experts.find(({ name }) => name === explorer.systemName);
-    return !explorer.optional || status?.enabled === true;
+    return explorer.optional ? status?.enabled === true : status?.enabled !== false;
   }).map((explorer) => ({ ...explorer, available: system.experts.find(({ name }) => name === explorer.systemName)?.available })), [system.experts]);
 
   const rememberAutoExecuteWorkflow = useCallback((id) => {
@@ -718,6 +719,7 @@ function App() {
         if (text.includes('codex explorer started')) appendActivity('Codex started');
         if (text.includes('antigravity explorer started')) appendActivity('Antigravity started');
         if (text.includes('opencode explorer started')) appendActivity('OpenCode started');
+        if (text.includes('claude code explorer started')) appendActivity('Claude Code started');
         if (text.includes('independent judge') || text.includes('judge comparing') || text.includes('judge report ready')) activateJudge();
       }
       if (event.type === 'expert') {
@@ -1118,6 +1120,25 @@ function App() {
     window.setTimeout(() => setNotice(''), 2800);
   };
 
+  const toggleCliIntegration = async (id, enabled) => {
+    const response = await fetch(`/api/cli-integrations/${encodeURIComponent(id)}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ enabled }) });
+    const payload = await response.json();
+    if (!response.ok) return payload.error || 'Unable to update the CLI integration.';
+    const integrations = payload.integrations || [];
+    setCliIntegrations(integrations);
+    setSystem((current) => ({
+      ...current,
+      cliIntegrations: integrations,
+      experts: current.experts.map((expert) => {
+        const integration = integrations.find(({ command }) => command === expert.name);
+        return integration ? { ...expert, enabled: integration.enabled, available: integration.available, version: integration.version } : expert;
+      }),
+    }));
+    setNotice(`${integrations.find((integration) => integration.id === id)?.label || 'CLI'} ${enabled ? 'enabled' : 'disabled'}.`);
+    window.setTimeout(() => setNotice(''), 2800);
+    return '';
+  };
+
   const openMoaTerminal = async () => {
     setError('');
     setNotice('');
@@ -1196,6 +1217,7 @@ function App() {
             <button className={view === 'chat' ? 'active' : ''} onClick={openChat}><Icon name="chat" />Chat</button>
             <button className={view === 'runs' ? 'active' : ''} onClick={() => setView('runs')}><Icon name="runs" />Runs</button>
             <button className={view === 'gateways' ? 'active' : ''} onClick={() => setView('gateways')}><Icon name="network" />Gateways</button>
+            <button className={view === 'settings' ? 'active' : ''} onClick={() => { setView('settings'); setSidebarOpen(false); }}><Icon name="settings" />Settings</button>
           </div>
           <div className="section-label">Recent runs</div>
           <div className="run-list">
@@ -1287,7 +1309,7 @@ function App() {
           {view === 'chat' ? <Suspense fallback={<div className="view-loading">Loading chat…</div>}><ChatSession /></Suspense> : null}
           {view === 'runs' ? <RunDetail run={selectedRun} detail={runDetail} runs={runs} onSelect={selectRun} onResume={openResume} resumeDraft={resumeDraft} onResumeInstruction={(instruction) => setResumeDraft((current) => ({ ...current, instruction, drift: null }))} onSubmitResume={submitResume} onCancelResume={cancelResume} resuming={resuming} onBack={() => { setSelectedRun(null); setRunDetail(null); }} /> : null}
           {view === 'gateways' ? <Gateways integrations={cliIntegrations} session={terminalSession} openingId={gatewayOpening} onOpen={openGateway} onClose={closeGateway} onTerminalError={setError} /> : null}
-          {view === 'settings' ? <Settings themePreference={themePreference} onThemeChange={setThemePreference} colourScheme={colourScheme} onColourSchemeChange={setColourScheme} autonomousAgent={autonomousAgent} onAutonomousAgentChange={setAutonomousAgent} optionalExplorers={system.optionalExplorers || []} onOptionalExplorerChange={toggleOptionalExplorer} workflowActive={workflowLocked} integrations={cliIntegrations} onAddCli={addCliIntegration} onRemoveCli={removeCliIntegration} /> : null}
+          {view === 'settings' ? <Settings themePreference={themePreference} onThemeChange={setThemePreference} colourScheme={colourScheme} onColourSchemeChange={setColourScheme} autonomousAgent={autonomousAgent} onAutonomousAgentChange={setAutonomousAgent} optionalExplorers={system.optionalExplorers || []} onOptionalExplorerChange={toggleOptionalExplorer} workflowActive={workflowLocked} integrations={cliIntegrations} onAddCli={addCliIntegration} onRemoveCli={removeCliIntegration} onCliEnabledChange={toggleCliIntegration} /> : null}
         </main>
       </div>
 
@@ -1318,7 +1340,7 @@ function RunDetail({ run, detail, runs, onSelect, onResume, resumeDraft, onResum
   const files = detail?.files || {};
   const parent = run.parentRunId ? runs.find((item) => item.runId === run.parentRunId) : null;
   const children = runs.filter((item) => item.parentRunId === run.runId);
-  const reportFiles = ['continuation-context.md', 'investigation-brief.md', 'codex.md', 'antigravity.md', 'opencode.md', 'openclaw.md', 'hermes.md', 'evidence.md', ...Object.keys(files).filter((file) => /^(?:execution|verification)-attempt-\d+\.md$|^correction-approval-attempt-\d+\.json$/.test(file)).sort(), 'execution.md', 'verification.md'];
+  const reportFiles = ['continuation-context.md', 'investigation-brief.md', 'codex.md', 'antigravity.md', 'opencode.md', 'claude.md', 'openclaw.md', 'hermes.md', 'evidence.md', ...Object.keys(files).filter((file) => /^(?:execution|verification)-attempt-\d+\.md$|^correction-approval-attempt-\d+\.json$/.test(file)).sort(), 'execution.md', 'verification.md'];
   return <section className="run-detail"><div className="page-heading run-detail-heading"><button className="back" onClick={onBack}>Project history /</button><h1>{run.task}</h1><p>{run.workspace}</p><div className="run-lineage"><span>Revision {run.revision || 1}</span><span>Verify: {run.verificationStatus || 'not-run'}</span>{parent ? <button onClick={() => onSelect(parent)}>Parent · revision {parent.revision}</button> : <span>Root run</span>}{children.map((child) => <button key={child.name} onClick={() => onSelect(child)}>Child · revision {child.revision}</button>)}</div><button className="resume-run" onClick={() => onResume(run)} disabled={!run.resumeEligible}><Icon name="refresh" size={16} />Resume Run</button>{run.resumeIssue ? <small className="resume-issue">{run.resumeIssue}</small> : null}</div><ResumePanel run={run} detail={detail} draft={resumeDraft} onInstruction={onResumeInstruction} onSubmit={onSubmitResume} onCancel={onCancelResume} resuming={resuming} /><div className="report-grid"><article><h2>Execution plan</h2><pre>{files['judge.md'] || 'No execution plan was produced for this run.'}</pre></article><aside>{reportFiles.map((file) => <details key={file}><summary>{file.replace(/\.(?:md|json)$/, '').replaceAll('-', ' ')}</summary><pre>{files[file] || 'No report.'}</pre></details>)}</aside></div></section>;
 }
 
@@ -1330,13 +1352,14 @@ function Gateways({ integrations, session, openingId, onOpen, onClose, onTermina
         {integrations.map((integration) => {
           const active = session?.cliId === integration.id;
           const opening = openingId === integration.id;
-          const available = integration.gatewayAvailable ?? integration.available;
+          const installed = integration.gatewayAvailable ?? integration.available;
+          const available = installed && integration.enabled;
           return (
             <div className={`gateway ${integration.id} ${active ? 'active' : ''}`} key={integration.id}>
               <span className="expert-mark">{integration.mark}</span>
               <span><strong>{integration.label}</strong><small>{integration.gatewayVersion || integration.version || 'Checking installation…'}</small></span>
-              <span className={available ? 'online' : 'offline'}>{available ? 'Available' : 'Unavailable'}</span>
-              <button onClick={() => onOpen(integration.id)} disabled={!available || Boolean(openingId) || active} title={!available ? `${integration.label} is not installed` : undefined}><Icon name="terminal" />{opening ? 'Opening…' : active ? 'Running' : 'Open gateway'}</button>
+              <span className={available ? 'online' : 'offline'}>{available ? 'Available' : integration.enabled ? 'Unavailable' : 'Disabled'}</span>
+              <button onClick={() => onOpen(integration.id)} disabled={!available || Boolean(openingId) || active} title={!integration.enabled ? `${integration.label} is disabled in Settings` : !installed ? `${integration.label} is not installed` : undefined}><Icon name="terminal" />{opening ? 'Opening…' : active ? 'Running' : 'Open gateway'}</button>
             </div>
           );
         })}
@@ -1350,10 +1373,11 @@ function Gateways({ integrations, session, openingId, onOpen, onClose, onTermina
   );
 }
 
-function Settings({ themePreference, onThemeChange, colourScheme, onColourSchemeChange, autonomousAgent, onAutonomousAgentChange, optionalExplorers, onOptionalExplorerChange, workflowActive, integrations, onAddCli, onRemoveCli }) {
+function Settings({ themePreference, onThemeChange, colourScheme, onColourSchemeChange, autonomousAgent, onAutonomousAgentChange, optionalExplorers, onOptionalExplorerChange, workflowActive, integrations, onAddCli, onRemoveCli, onCliEnabledChange }) {
   const [cliForm, setCliForm] = useState({ label: '', command: '', launcher: '' });
   const [cliError, setCliError] = useState('');
   const [savingCli, setSavingCli] = useState(false);
+  const [savingCliToggle, setSavingCliToggle] = useState('');
   const [explorerError, setExplorerError] = useState('');
   const [savingExplorer, setSavingExplorer] = useState('');
   const displayedOptionalExplorers = optionalExplorers.length ? optionalExplorers : [
@@ -1381,6 +1405,14 @@ function Settings({ themePreference, onThemeChange, colourScheme, onColourScheme
     const message = await onOptionalExplorerChange(id, enabled);
     setSavingExplorer('');
     if (message) setExplorerError(message);
+  };
+
+  const toggleCli = async (id, enabled) => {
+    setSavingCliToggle(id);
+    setCliError('');
+    const message = await onCliEnabledChange(id, enabled);
+    setSavingCliToggle('');
+    if (message) setCliError(message);
   };
 
   return (
@@ -1413,9 +1445,9 @@ function Settings({ themePreference, onThemeChange, colourScheme, onColourScheme
       </section>
 
       <section className="settings-card cli-settings" aria-labelledby="cli-integrations-heading">
-        <div className="settings-card-heading"><h2 id="cli-integrations-heading">CLI integrations</h2><p>Add other command-line tools. MoA checks each binary with <code>--version</code>; an optional launcher enables it on the Gateways screen.</p></div>
+        <div className="settings-card-heading"><h2 id="cli-integrations-heading">CLI integrations</h2><p>Enable supported agents for new workflows and chat, and control every integration&apos;s gateway access. MoA checks each binary with <code>--version</code>; an optional launcher enables custom tools on the Gateways screen.</p></div>
         <div className="cli-integration-list">
-          {integrations.map((integration) => <div className="cli-integration" key={integration.id}><span className="cli-mark">{integration.mark}</span><span className="cli-integration-copy"><strong>{integration.label}</strong><small><code>{integration.command}</code> · {integration.available ? integration.version : 'Unavailable'}</small></span><span className={integration.available ? 'online' : 'offline'}>{integration.available ? 'Available' : 'Unavailable'}</span>{integration.builtIn ? <span className="built-in-label">Built in</span> : <button className="remove-cli" onClick={() => onRemoveCli(integration.id)} aria-label={`Remove ${integration.label}`}><Icon name="x" size={15} />Remove</button>}</div>)}
+          {integrations.map((integration) => <div className={`cli-integration ${integration.id} ${integration.enabled ? '' : 'disabled'}`} key={integration.id}><span className="cli-mark">{integration.mark}</span><span className="cli-integration-copy"><strong>{integration.label}</strong><small><code>{integration.command}</code> · {integration.available ? integration.version : 'Unavailable'}</small></span><span className={integration.enabled && integration.available ? 'online' : 'offline'}>{integration.enabled ? integration.available ? 'Available' : 'Unavailable' : 'Disabled'}</span><span className="cli-integration-actions">{integration.builtIn ? <span className="built-in-label">Built in</span> : <button className="remove-cli" onClick={() => onRemoveCli(integration.id)} aria-label={`Remove ${integration.label}`}><Icon name="x" size={15} />Remove</button>}<label className="cli-enabled-toggle" title={`${integration.enabled ? 'Disable' : 'Enable'} ${integration.label}`}><input type="checkbox" role="switch" checked={integration.enabled} disabled={workflowActive || savingCliToggle === integration.id || (!integration.gatewayAvailable && !integration.enabled)} onChange={(event) => toggleCli(integration.id, event.target.checked)} aria-label={`${integration.enabled ? 'Disable' : 'Enable'} ${integration.label}`} /><span className="toggle-track" aria-hidden="true"><i /></span></label></span></div>)}
         </div>
         <form className="cli-form" onSubmit={submitCli}>
           <div className="cli-form-heading"><strong>Add a CLI</strong><small>Command arguments are intentionally not accepted.</small></div>

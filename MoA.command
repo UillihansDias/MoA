@@ -94,14 +94,20 @@ resolve_binary() {
 CODEX=$(resolve_binary "$HOME/.local/bin/codex" codex)
 AGY=$(resolve_binary "$HOME/.local/bin/agy" agy)
 OPENCODE=$(resolve_binary "$HOME/.local/bin/opencode" opencode)
+CLAUDE=$(resolve_binary "$HOME/.local/bin/claude" claude)
 OPENCLAW=$(resolve_binary "$HOME/.local/bin/openclaw" openclaw)
 HERMES=$(resolve_binary "$HOME/.local/bin/hermes" hermes)
 OPENCODE_MODEL="${MOA_OPENCODE_MODEL:-opencode/deepseek-v4-flash-free}"
 OPENCODE_FALLBACK_MODEL="${MOA_OPENCODE_FALLBACK_MODEL:-opencode/mimo-v2.5-free}"
 OPTIONAL_EXPLORERS=",${MOA_OPTIONAL_EXPLORERS:-},"
+ENABLED_CLIS=",${MOA_ENABLED_CLIS:-codex,antigravity,opencode,claude},"
 
 optional_explorer_enabled() {
     case "$OPTIONAL_EXPLORERS" in *",$1,"*) return 0 ;; *) return 1 ;; esac
+}
+
+cli_enabled() {
+    case "$ENABLED_CLIS" in *",$1,"*) return 0 ;; *) return 1 ;; esac
 }
 
 opencode_model_ready() {
@@ -112,7 +118,7 @@ opencode_model_ready() {
 }
 
 OPENCODE_READY=0
-if opencode_model_ready; then OPENCODE_READY=1; fi
+if cli_enabled opencode && opencode_model_ready; then OPENCODE_READY=1; fi
 
 version_of() {
     local binary="$1"
@@ -121,13 +127,14 @@ version_of() {
 
 show_roster() {
     printf "\n  ${BOLD}Expert roster${NC}\n"
-    printf "  ${BLUE}Codex${NC}        %s\n" "$(version_of "$CODEX")"
-    printf "  ${PURPLE}Antigravity${NC}  %s\n" "$(version_of "$AGY")"
-    if [ "$OPENCODE_READY" -eq 1 ]; then
+    if cli_enabled codex; then printf "  ${BLUE}Codex${NC}        %s\n" "$(version_of "$CODEX")"; fi
+    if cli_enabled antigravity; then printf "  ${PURPLE}Antigravity${NC}  %s\n" "$(version_of "$AGY")"; fi
+    if cli_enabled opencode && [ "$OPENCODE_READY" -eq 1 ]; then
         printf "  ${YELLOW}OpenCode${NC}     %s\n" "$(version_of "$OPENCODE")"
-    else
+    elif cli_enabled opencode; then
         printf "  ${YELLOW}OpenCode${NC}     compatible model unavailable\n"
     fi
+    if cli_enabled claude; then printf "  ${WHITE}Claude Code${NC}  %s\n" "$(version_of "$CLAUDE")"; fi
     if optional_explorer_enabled openclaw; then printf "  ${CYAN}OpenClaw${NC}      %s (optional)\n" "$(version_of "$OPENCLAW")"; fi
     if optional_explorer_enabled hermes; then printf "  ${GREEN}Hermes Agent${NC} %s (optional)\n" "$(version_of "$HERMES")"; fi
     printf "  ${GREEN}Conductor${NC}    Codex (brief, consolidation, plan, verification)\n"
@@ -301,6 +308,10 @@ run_hermes_explorer() {
     ( cd "$workdir" || exit 1; run_report_command "$run_dir/hermes.log" "$run_dir/hermes.md" truncate "$HERMES" --ignore-rules -z "$1" )
 }
 
+run_claude_explorer() {
+    ( cd "$workdir" || exit 1; run_report_command "$run_dir/claude.log" "$run_dir/claude.md" truncate "$CLAUDE" -p --permission-mode plan --output-format text --max-turns 12 "$1" )
+}
+
 run_explorers() {
     state_stage explore running "Independent explorers launched against the same brief."
     local prompt
@@ -309,19 +320,23 @@ run_explorers() {
     header
     printf "  ${WHITE}${BOLD}PARALLEL EXPLORATION${NC}\n"
     printf "  ${DIM}%s${NC}\n\n" "$run_dir"
-    codex_pid=''; agy_pid=''; opencode_pid=''; openclaw_pid=''; hermes_pid=''
-    if [ -n "$CODEX" ] && [ -x "$CODEX" ]; then
+    codex_pid=''; agy_pid=''; opencode_pid=''; claude_pid=''; openclaw_pid=''; hermes_pid=''
+    if cli_enabled codex && [ -n "$CODEX" ] && [ -x "$CODEX" ]; then
         ( run_stage_command "$run_dir/codex.log" "$run_dir/codex.md" truncate "$CODEX" exec --ephemeral --skip-git-repo-check --color never -s read-only -C "$workdir" -o "$run_dir/codex.md" "$prompt" ) &
         codex_pid=$!; printf "  ${BLUE}●${NC} Codex explorer started\n"
-    else printf '127\n' > "$run_dir/codex.status"; printf "  ${RED}○${NC} Codex unavailable\n"; fi
-    if [ -n "$AGY" ] && [ -x "$AGY" ]; then
+    elif cli_enabled codex; then printf '127\n' > "$run_dir/codex.status"; printf "  ${RED}○${NC} Codex unavailable\n"; fi
+    if cli_enabled antigravity && [ -n "$AGY" ] && [ -x "$AGY" ]; then
         ( cd "$workdir" || exit 1; run_report_command "$run_dir/antigravity.log" "$run_dir/antigravity.md" truncate "$AGY" --sandbox --print "$prompt" --print-timeout 10m ) &
         agy_pid=$!; printf "  ${PURPLE}●${NC} Antigravity explorer started\n"
-    else printf '127\n' > "$run_dir/antigravity.status"; printf "  ${RED}○${NC} Antigravity unavailable\n"; fi
-    if [ "$OPENCODE_READY" -eq 1 ]; then
+    elif cli_enabled antigravity; then printf '127\n' > "$run_dir/antigravity.status"; printf "  ${RED}○${NC} Antigravity unavailable\n"; fi
+    if cli_enabled opencode && [ "$OPENCODE_READY" -eq 1 ]; then
         ( run_opencode_explorer "$prompt" ) &
         opencode_pid=$!; printf "  ${YELLOW}●${NC} OpenCode explorer started\n"
-    else printf '127\n' > "$run_dir/opencode.status"; printf "  ${YELLOW}○${NC} OpenCode skipped: compatible model unavailable\n"; fi
+    elif cli_enabled opencode; then printf '127\n' > "$run_dir/opencode.status"; printf "  ${YELLOW}○${NC} OpenCode skipped: compatible model unavailable\n"; fi
+    if cli_enabled claude && [ -n "$CLAUDE" ] && [ -x "$CLAUDE" ]; then
+        ( run_claude_explorer "$prompt" ) &
+        claude_pid=$!; printf "  ${WHITE}●${NC} Claude Code explorer started\n"
+    elif cli_enabled claude; then printf '127\n' > "$run_dir/claude.status"; printf "  ${RED}○${NC} Claude Code unavailable\n"; fi
     if optional_explorer_enabled openclaw; then
         if [ -n "$OPENCLAW" ] && [ -x "$OPENCLAW" ]; then
             ( run_openclaw_explorer ) &
@@ -338,10 +353,15 @@ run_explorers() {
     if [ -n "$codex_pid" ]; then wait "$codex_pid"; printf '%s\n' "$?" > "$run_dir/codex.status"; fi
     if [ -n "$agy_pid" ]; then wait "$agy_pid"; printf '%s\n' "$?" > "$run_dir/antigravity.status"; fi
     if [ -n "$opencode_pid" ]; then wait "$opencode_pid"; printf '%s\n' "$?" > "$run_dir/opencode.status"; fi
+    if [ -n "$claude_pid" ]; then wait "$claude_pid"; printf '%s\n' "$?" > "$run_dir/claude.status"; fi
     if [ -n "$openclaw_pid" ]; then wait "$openclaw_pid"; printf '%s\n' "$?" > "$run_dir/openclaw.status"; fi
     if [ -n "$hermes_pid" ]; then wait "$hermes_pid"; printf '%s\n' "$?" > "$run_dir/hermes.status"; fi
     successful=0
-    expert_names="codex antigravity opencode"
+    expert_names=""
+    cli_enabled codex && expert_names="$expert_names codex"
+    cli_enabled antigravity && expert_names="$expert_names antigravity"
+    cli_enabled opencode && expert_names="$expert_names opencode"
+    cli_enabled claude && expert_names="$expert_names claude"
     optional_explorer_enabled openclaw && expert_names="$expert_names openclaw"
     optional_explorer_enabled hermes && expert_names="$expert_names hermes"
     : > "$run_dir/successful-expert-reports.txt"
