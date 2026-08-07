@@ -82,6 +82,7 @@ chmod 700 "$INSTALL_DIR"
   --exclude '.MoA_WebCodeContextBundle.txt' \
   --exclude '.MoA_CodeContextBundle.txt' \
   --exclude 'cli-integrations.json' \
+  --exclude 'cli-enabled.json' \
   --exclude 'optional-explorers.json' \
   --exclude 'upload-staging/' \
   --exclude 'chat-sessions/' \

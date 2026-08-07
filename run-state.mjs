@@ -174,8 +174,12 @@ const probeBinary = async (name) => {
 export const initializeRun = async (runDir, workspace) => {
   await fs.mkdir(runDir, { recursive: true, mode: 0o700 });
   await fs.chmod(runDir, 0o700);
+  const enabledClis = String(process.env.MOA_ENABLED_CLIS || 'codex,antigravity,opencode,claude')
+    .split(',')
+    .filter((name) => ['codex', 'antigravity', 'opencode', 'claude'].includes(name));
   const optionalExplorers = String(process.env.MOA_OPTIONAL_EXPLORERS || '').split(',').filter((name) => ['openclaw', 'hermes'].includes(name));
-  const clis = await Promise.all(['codex', 'agy', 'opencode', ...optionalExplorers].map(probeBinary));
+  const cliCommands = enabledClis.map((name) => name === 'antigravity' ? 'agy' : name);
+  const clis = await Promise.all([...cliCommands, ...optionalExplorers].map(probeBinary));
   const createdAt = nowIso();
   const manifest = {
     ...(await baseManifest(runDir)),
@@ -187,12 +191,14 @@ export const initializeRun = async (runDir, workspace) => {
       architecture: process.arch,
       clis,
       enforcement: {
-        codex: 'CLI read-only sandbox',
-        antigravity: 'CLI sandbox',
-        opencode: `Primary OpenCode explorer using ${process.env.MOA_OPENCODE_MODEL || 'opencode/deepseek-v4-flash-free'} with ${process.env.MOA_OPENCODE_FALLBACK_MODEL || 'opencode/mimo-v2.5-free'} as a bounded fallback; enforcement depends on the local OpenCode agent policy`,
+        ...(enabledClis.includes('codex') ? { codex: 'CLI read-only sandbox' } : {}),
+        ...(enabledClis.includes('antigravity') ? { antigravity: 'CLI sandbox' } : {}),
+        ...(enabledClis.includes('opencode') ? { opencode: `Primary OpenCode explorer using ${process.env.MOA_OPENCODE_MODEL || 'opencode/deepseek-v4-flash-free'} with ${process.env.MOA_OPENCODE_FALLBACK_MODEL || 'opencode/mimo-v2.5-free'} as a bounded fallback; enforcement depends on the local OpenCode agent policy` } : {}),
+        ...(enabledClis.includes('claude') ? { claude: 'Claude Code non-interactive plan permission mode with prompt-scoped read-only instructions' } : {}),
         ...(optionalExplorers.includes('openclaw') ? { openclaw: 'Optional independent OpenClaw local agent; prompt-scoped read-only policy with no delivery or delegation' } : {}),
         ...(optionalExplorers.includes('hermes') ? { hermes: 'Optional independent Hermes one-shot agent; project rules and memory excluded, prompt-scoped read-only policy with no delegation' } : {}),
       },
+      enabledClis,
       optionalExplorers,
     },
   };

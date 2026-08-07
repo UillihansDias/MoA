@@ -10,6 +10,7 @@ MoA_WebCodeContextBundle.txt
 .MoA_WebCodeContextBundle.txt
 .MoA_CodeContextBundle.txt
 cli-integrations.json
+cli-enabled.json
 optional-explorers.json
 upload-staging/
 chat-sessions/

@@ -142,6 +142,18 @@ input,textarea,.gateway button,.run-selection-actions button,.view-all,.theme-op
 .optional-explorer.unavailable { cursor:not-allowed;opacity:.62; }
 .optional-explorer input:disabled + .toggle-track { opacity:.55; }
 .optional-explorer-error { margin:0;padding:0 20px 16px;color:#ff7d86;font-size:11px; }
+.expert-row.claude,.gateway.claude { --expert:#d89b76; }
+.cli-integration { grid-template-columns:38px minmax(0,1fr) auto minmax(118px,auto); }
+.cli-integration.disabled { opacity:.68; }
+.cli-integration-actions { justify-self:end;display:flex;align-items:center;justify-content:flex-end;gap:10px; }
+.cli-enabled-toggle { position:relative;display:flex;align-items:center;cursor:pointer; }
+.cli-enabled-toggle input { position:absolute;opacity:0;pointer-events:none; }
+.cli-enabled-toggle .toggle-track { width:36px;height:21px; }
+.cli-enabled-toggle .toggle-track i { width:15px;height:15px; }
+.cli-enabled-toggle input:checked + .toggle-track { background:var(--accent-soft);border-color:var(--accent); }
+.cli-enabled-toggle input:checked + .toggle-track i { background:var(--accent);transform:translateX(15px); }
+.cli-enabled-toggle input:focus-visible + .toggle-track { outline:2px solid var(--accent);outline-offset:3px; }
+.cli-enabled-toggle input:disabled + .toggle-track { opacity:.45;cursor:not-allowed; }
 
 @media (prefers-reduced-transparency:reduce) {
   .titlebar,.rail,.sidebar,.pipeline,.evidence-scroll,.settings-card,.gateway,.report-grid article,.report-grid details,.delete-dialog,.modal-backdrop { backdrop-filter:none;-webkit-backdrop-filter:none; }
@@ -154,3 +166,4 @@ input,textarea,.gateway button,.run-selection-actions button,.view-all,.theme-op
 @media (max-width:760px) { body { overflow:auto; }.app { height:auto;min-height:100vh;grid-template-rows:52px minmax(calc(100vh - 52px),auto); }.titlebar { height:52px; }.brand-mark { width:52px;height:52px; }.brand-name { padding-left:12px; }.rail { display:none; }.sidebar { position:fixed;z-index:10;left:0;top:52px;bottom:0;box-shadow:18px 0 40px rgba(0,0,0,.4); }.sidebar:not(.open) { transform:translateX(-100%);width:302px; }.intake { padding:20px 16px 12px; }.page-heading h1 { font-size:26px; }.pipeline { margin:0 16px 14px;grid-template-columns:minmax(0,1fr) minmax(0,1fr);padding:12px;gap:16px 10px; }.stage { gap:8px; }.stage strong { font-size:12px; }.stage small { display:none; }.run-workspace { grid-template-columns:1fr; }.experts-panel { border-right:0;border-bottom:1px solid var(--line);padding-bottom:18px; }.evidence-panel { min-height:620px; }.report-grid { grid-template-columns:1fr; }.library,.run-detail,.gateways,.settings { padding:22px 16px; }.gateway { grid-template-columns:38px minmax(0,1fr) auto; }.gateway > .online,.gateway > .offline { display:none; }.gateway button { font-size:0;padding:0 9px; }.output { min-height:220px; }.workflow-lifecycle { padding-inline:13px; }.judge-decision,.activity-log { margin-inline:13px; }.correction-approval-card { margin:14px 16px 0; }.correction-approval-grid { grid-template-columns:1fr; }.correction-approval-actions { flex-direction:column-reverse; }.correction-approval-actions button { width:100%; }.colour-options { grid-template-columns:1fr; }.cli-integration { grid-template-columns:38px minmax(0,1fr) auto; }.cli-integration > .online,.cli-integration > .offline { display:none; }.built-in-label,.remove-cli { grid-column:3; }.remove-cli { width:34px;padding:0;justify-content:center;font-size:0; }.cli-form-heading { display:grid; }.cli-form-grid { grid-template-columns:1fr; }.cli-form-grid .launcher-field { grid-column:auto; } }
 @media (prefers-reduced-motion:reduce) { * { scroll-behavior:auto!important;transition:none!important; }.progress-track.indeterminate::after { animation:none;width:42%;opacity:.55;background:repeating-linear-gradient(135deg,var(--accent) 0 5px,transparent 5px 9px); }.orchestrator-indicator,.activity-stream-line,.activity-state i,.activity-node,.activity-stream-lines::after,.activity-orbit,.attachment-spinner { animation:none!important; } }
 @media (max-width:760px) { .embedded-terminal { height:65vh;min-height:420px;border-radius:9px; }.terminal-canvas { padding:11px 8px; } }
+@media (max-width:760px) { .cli-integration-actions { grid-column:3; }.cli-integration-actions .built-in-label { display:none; } }

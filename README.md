@@ -36,7 +36,7 @@ The Orchestrator controls the workflow but is not treated as another sequential 
 
 - **Initialize** validates the workspace and starts the conductor.
 - **Plan** produces one investigation brief and explicit success criteria.
-- **Parallel Exploration** runs Codex, Antigravity, and OpenCode independently against that same brief, with no cross-talk.
+- **Parallel Exploration** runs the enabled Codex, Antigravity, OpenCode, and Claude Code agents independently against that same brief, with no cross-talk.
 - **Consolidate Evidence** normalizes reports, removes duplicates, and preserves consensus and disagreements without choosing a solution.
 - **Judge** compares the preserved independent recommendations, probes material disagreements against their source evidence when needed, and produces one execution plan with rationale and a confidence level.
 - **Execute Plan** applies only that plan, avoids unrelated changes, and writes a structured record of the changes and checks performed.
@@ -54,7 +54,7 @@ Saved projects are resumable without mutating history. Resume is also the suppor
 
 ## Features
 
-- Independent Codex, Antigravity, and OpenCode explorer runs, with optional OpenClaw and Hermes Agent passes
+- Independent Codex, Antigravity, OpenCode, and Claude Code explorer runs, with optional OpenClaw and Hermes Agent passes
 - Persistent Orchestrator status and seven-stage lifecycle monitor
 - Per-explorer activity, completion, failure, and availability states
 - Evidence-backed execution plan summary
@@ -90,6 +90,7 @@ Node.js local service
       +-- Codex CLI
       +-- Antigravity CLI
       +-- OpenCode CLI
+      +-- Claude Code CLI
       +-- saved reports in ~/Documents/MoA Runs
 
 Native Swift wrapper
@@ -123,8 +124,9 @@ Built-in integrations:
 - `codex`
 - `agy` (Antigravity)
 - `opencode`
+- `claude` (Claude Code)
 
-Additional CLI launchers can be registered from Settings. Custom integration data is stored locally in `$HOME/.MoA/cli-integrations.json` with user-only permissions and is not committed.
+Built-in and custom CLI integrations can be enabled or disabled from **Settings → CLI integrations**. The choice applies to new workflow rosters, chat availability, and gateway access, and survives service restarts and upgrades. Custom integration data is stored locally in `$HOME/.MoA/cli-integrations.json`; enabled state is stored in `$HOME/.MoA/cli-enabled.json`. Both use user-only permissions and are not committed.
 
 OpenClaw and Hermes Agent can be enabled independently under **Settings → Optional explorers** when their binaries are installed. Both are off by default and participate only in the parallel Explore stage. They receive the same brief, cannot replace the judge/executor/verifier, are instructed not to delegate or use prior conversational memory, and their failure does not block the workflow while at least two explorer reports still succeed. The selected roster is stored privately in `$HOME/.MoA/optional-explorers.json` and recorded in each new run manifest.
 
